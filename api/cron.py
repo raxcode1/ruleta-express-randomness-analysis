@@ -33,8 +33,13 @@ def ejecutar() -> dict:
     resultados = datos.get("results") or []
     papel = datos.get("papel") or {}
     proxima = papel.get("proxima") or {}
+    recencia = datos.get("recencia") or {}
+    rp = recencia.get("proxima") or {}
     return {
-        "ok": not datos.get("sync_error") and not papel.get("error"),
+        "ok": not datos.get("sync_error") and not papel.get("error") and not recencia.get("error"),
+        "recencia_error": recencia.get("error"),
+        "recencia": {"estado": (recencia.get("monitor") or {}).get("estado"),
+                     **{k: rp.get(k) for k in ("sorteo_objetivo", "regimen", "numeros", "stake_sugerido", "valida")}} if rp else None,
         "ultimo_sorteo": resultados[0].get("No_Sorteo") if resultados else None,
         "sync_error": datos.get("sync_error"),
         "papel_error": papel.get("error"),

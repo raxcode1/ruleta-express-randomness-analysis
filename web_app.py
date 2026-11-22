@@ -21,6 +21,7 @@ from live_monitor import LiveMonitor, json_file_store
 from m4_engine.kelly import KellyConfig
 from papel import registro as papel_registro
 from papel import web as papel_web
+from recencia import web as recencia_web
 from quant import integration as quant_integration
 from sync_ruleta_express import CSV_PATH, run_once
 
@@ -56,6 +57,7 @@ class DashboardState:
             bankroll=config_alertas.BANCO_INICIAL,
             backfill_rounds=config_alertas.RONDAS_BACKFILL,
             max_records=config_alertas.RONDAS_GUARDADAS,
+            reglas_activas=getattr(config_alertas, "M4_ACTIVO", False),
         )
 
     def update_recovery(self) -> None:
@@ -91,6 +93,7 @@ class DashboardState:
             }
             # Modo papel: mismo bloque que en Vercel, con el libro en disco local.
             payload["papel"] = papel_web.panel(payload["results"], papel_registro.AlmacenArchivos())
+            payload["recencia"] = recencia_web.panel(payload["results"], papel_registro.AlmacenArchivos())
             payload["storage_restaurado"] = []
             payload.update(self.monitor.payload())
             return quant_integration.attach(

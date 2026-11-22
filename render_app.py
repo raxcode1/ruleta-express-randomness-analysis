@@ -39,6 +39,8 @@ from live_monitor import LiveMonitor, json_file_store, memory_store
 from m4_engine.kelly import KellyConfig
 from papel import registro as papel_registro
 from papel import web as papel_web
+from recencia import web as recencia_web
+from recencia.integridad import ordenar_sin_duplicados
 from quant import integration as quant_integration
 
 import os
@@ -104,20 +106,13 @@ def mezclar(
     existentes: list[dict[str, str]], nuevas: list[dict[str, str]]
 ) -> list[dict[str, str]]:
     """Combina y deduplica sorteos, ordenados del más reciente al más antiguo."""
-    combined: dict[str, dict[str, str]] = {}
-    for row in existentes:
-        if row.get("No_Sorteo"):
-            combined[row["No_Sorteo"]] = row
-    for row in nuevas:
-        label = str(row.get("No_Sorteo") or "").strip()
-        if not label:
-            continue
-        combined[label] = {
-            column: str(row.get(column) or "").strip() for column in EXPECTED_COLUMNS
-        }
-    return sorted(
-        combined.values(), key=lambda row: draw_number(row["No_Sorteo"]), reverse=True
-    )
+    # Clave = número de sorteo: «No. 123» y «No.123» son el mismo sorteo.
+    limpias = [
+        {column: str(row.get(column) or "").strip() for column in EXPECTED_COLUMNS}
+        for row in nuevas
+        if str(row.get("No_Sorteo") or "").strip()
+    ]
+    return ordenar_sin_duplicados(list(existentes) + limpias)
 
 
 class Estado:
@@ -161,6 +156,7 @@ class Estado:
             bankroll=config_alertas.BANCO_INICIAL,
             backfill_rounds=config_alertas.RONDAS_BACKFILL,
             max_records=config_alertas.RONDAS_GUARDADAS,
+            reglas_activas=getattr(config_alertas, "M4_ACTIVO", False),
         )
         self._cargar()
 
@@ -246,6 +242,7 @@ class Estado:
             }
             # Modo papel: mismo bloque que en Vercel, con el libro en disco local.
             payload["papel"] = papel_web.panel(payload["results"], papel_registro.AlmacenArchivos())
+            payload["recencia"] = recencia_web.panel(payload["results"], papel_registro.AlmacenArchivos())
             payload["storage_restaurado"] = []
             payload.update(self.monitor.payload())
             return quant_integration.attach(

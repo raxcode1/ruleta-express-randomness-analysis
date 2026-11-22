@@ -1,0 +1,51 @@
+{
+ "actualizado_utc": "2026-11-22T01:34:49+00:00",
+ "pago": 18.0,
+ "predicciones": 4,
+ "evaluadas": 2,
+ "tardias": 1,
+ "invalidas_por_hora_publicada": 1,
+ "pendientes": 1,
+ "top_k": {
+  "diurno": {},
+  "fuera": {
+   "3": {
+    "n": 2,
+    "aciertos": 0,
+    "tasa": 0.0,
+    "azar": 0.15789473684210525,
+    "equilibrio": 0.16666666666666666,
+    "retorno_por_peso": 0.0,
+    "p_vs_azar": 1.0,
+    "p_vs_equilibrio": 1.0
+   }
+  },
+  "total": {
+   "3": {
+    "n": 2,
+    "aciertos": 0,
+    "tasa": 0.0,
+    "azar": 0.15789473684210525,
+    "equilibrio": 0.16666666666666666,
+    "retorno_por_peso": 0.0,
+    "p_vs_azar": 1.0,
+    "p_vs_equilibrio": 1.0
+   }
+  }
+ },
+ "jugadas": {
+  "n": 0,
+  "aciertos": 0,
+  "tasa": null,
+  "apostado_fraccion": 0,
+  "ganancia_fraccion": 0,
+  "retorno_por_peso": null,
+  "banco_x": 1.0
+ },
+ "log_loss": {
+  "n": 2,
+  "modelo": 2.921705252748955,
+  "uniforme": 2.9444389791664403
+ },
+ "racha_fallos_diurno": 0
+}

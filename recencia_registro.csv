@@ -1,0 +1,5 @@
+sorteo_objetivo,ts_prediccion,hora_prevista,regimen,estado_monitor,k,numeros_topk,probabilidades_topk,numeros,probabilidades,stake_sugerido,monto_por_numero,motivo,version_modelo,valida,resultado,acierto_topk,acierto,retorno,p_resultado,hora_publicada,valida_publicada
+256011,2026-11-22T01:14:11+00:00,21/11/2026 21:13,fuera,activo,3,8 14 2,0.05879 0.05834 0.05656,,,0,0,predicción tardía: el sorteo pudo haber salido ya,1/conteo/255816,0,7,0,,,0.05252,21/11/2026 21:13,0
+256012,2026-11-22T01:15:19+00:00,21/11/2026 21:18,fuera,activo,3,2 12 8,0.05869 0.05690 0.05478,,,0,0,fuera de la franja diurna: no se apuesta,1/conteo/255816,1,15,0,,,0.05479,21/11/2026 21:18,1
+256013,2026-11-22T01:20:27+00:00,21/11/2026 21:23,fuera,activo,3,14 12 7,0.05888 0.05844 0.05665,,,0,0,fuera de la franja diurna: no se apuesta,1/conteo/255816,1,6,0,,,0.05291,21/11/2026 21:23,1
+256014,2026-11-22T01:25:29+00:00,21/11/2026 21:28,fuera,activo,3,2 7 15,0.05884 0.05839 0.05660,,,0,0,fuera de la franja diurna: no se apuesta,1/conteo/255816,1,,,,,,,

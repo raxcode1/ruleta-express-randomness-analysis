@@ -66,7 +66,25 @@ LIVE_MODELS: tuple[LiveModel, ...] = (
     LiveModel("H3", 1, 1.0, False, 0.50, DEFAULT_WINDOW, "blend"),
     LiveModel("H4", 1, 1.0, False, 0.75, DEFAULT_WINDOW, "blend"),
     LiveModel("H5", 1, 1.0, False, 1.00, DEFAULT_WINDOW, "blend"),
+    # R1: versión incremental del modelo de recencia (paquete `recencia/`).
+    # El motor sólo ve la secuencia de números, así que la antigüedad se mide
+    # en filas y no separa régimen diurno/fuera: es una referencia en la
+    # matriz, no el modelo operativo. No entra en la regla M4, que sólo mira
+    # los diez modelos de `m4_engine.config.MODEL_ORDER`.
+    LiveModel("R1", 0, 1.0, False, 0.0, None, "recencia"),
 )
+
+#: Primer valor de antigüedad de cada cubeta de R1: 1,2,3,4,5,6-8,9-14,15-30,>30
+#: (las mismas cubetas que `recencia.modelo.BORDES`).
+RECENCY_EDGES = (1, 2, 3, 4, 5, 6, 9, 15, 31)
+
+
+def _recency_bucket(age: int) -> int:
+    bucket = 0
+    for index, edge in enumerate(RECENCY_EDGES):
+        if age >= edge:
+            bucket = index
+    return bucket
 
 #: Nombre del submodelo que el motor de alertas vigila (M4 en la especificación).
 PRIMARY_MODEL_NAME = "M4"
@@ -131,6 +149,10 @@ class LiveModelEngine:
         self._frequency_window = [0] * OUTPUT_MODULUS
         self._recent_transitions: deque[tuple[int, int]] = deque()
         self._recent_values: deque[int] = deque()
+        # R1: última fila en que salió cada número y conteos por cubeta de antigüedad.
+        self._last_seen: list[int | None] = [None] * OUTPUT_MODULUS
+        self._recency_hits = [0] * len(RECENCY_EDGES)
+        self._recency_exposed = [0] * len(RECENCY_EDGES)
 
     # ------------------------------------------------------------------
     # Ingesta
@@ -168,12 +190,35 @@ class LiveModelEngine:
                     self._order3[key] = counts
                 counts[number] += 1
 
+        # R1: antes de registrar `number`, se cuenta en qué cubeta estaba cada candidato.
+        if self._values:
+            position = len(self._values)
+            for candidate in range(OUTPUT_MODULUS):
+                bucket = self._recency_bucket_of(candidate, position)
+                self._recency_exposed[bucket] += 1
+                if candidate == number:
+                    self._recency_hits[bucket] += 1
+        self._last_seen[number] = len(self._values)
+
         self._frequency_window[number] += 1
         self._recent_values.append(number)
         if len(self._recent_values) > self.window:
             self._frequency_window[self._recent_values.popleft()] -= 1
 
         self._values.append(number)
+
+    def _recency_bucket_of(self, candidate: int, position: int) -> int:
+        seen = self._last_seen[candidate]
+        return len(RECENCY_EDGES) - 1 if seen is None else _recency_bucket(position - seen)
+
+    def recency_distribution(self) -> list[float]:
+        """R1: P(v) ∝ (aciertos + 1) / (expuestos + 19) de la cubeta de antigüedad de v."""
+        weights = [
+            (hits + 1.0) / (exposed + OUTPUT_MODULUS)
+            for hits, exposed in zip(self._recency_hits, self._recency_exposed)
+        ]
+        position = len(self._values)
+        return _normalize([weights[self._recency_bucket_of(v, position)] for v in range(OUTPUT_MODULUS)])
 
     def run(self, values: list[int]) -> None:
         """Reproduce una secuencia completa de resultados."""
@@ -215,8 +260,11 @@ class LiveModelEngine:
 
         numbers: dict[str, int] = {}
         probabilities: dict[str, float] = {}
+        recency = self.recency_distribution()
         for model in LIVE_MODELS:
-            if model.family == "markov":
+            if model.family == "recencia":
+                distribution = list(recency)
+            elif model.family == "markov":
                 if model.order == 1:
                     distribution = list(order1_full)
                 elif model.order == 2:

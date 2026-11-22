@@ -25,6 +25,8 @@ from m4_engine.kelly import KellyConfig
 from papel import registro as papel_registro
 from papel import web as papel_web
 from quant import integration as quant_integration
+from recencia import web as recencia_web
+from recencia.integridad import ordenar_sin_duplicados
 from sync_ruleta_express import (
     backfill_missing_draws,
     extract_results,
@@ -339,6 +341,7 @@ def live_monitor() -> LiveMonitor:
             bankroll=config_alertas.BANCO_INICIAL,
             backfill_rounds=config_alertas.RONDAS_BACKFILL,
             max_records=config_alertas.RONDAS_GUARDADAS,
+            reglas_activas=getattr(config_alertas, "M4_ACTIVO", False),
         )
     return _monitor
 
@@ -368,13 +371,8 @@ def backfill_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def merge_results(rows: list[dict[str, str]], new_rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    merged = {row["No_Sorteo"]: row for row in rows if row.get("No_Sorteo")}
-    merged.update({row["No_Sorteo"]: row for row in new_rows})
-    return sorted(
-        merged.values(),
-        key=lambda row: int(row["No_Sorteo"].split()[-1]),
-        reverse=True,
-    )
+    """Combina por NÚMERO de sorteo («No. 123» y «No.123» son el mismo) y ordena del más reciente."""
+    return ordenar_sin_duplicados(list(rows) + list(new_rows))
 
 
 def recovery_for_rows(rows: list[dict[str, str]]) -> dict:
@@ -509,6 +507,14 @@ def dashboard(ligero: bool = False) -> dict:
         )
     except Exception as exception:
         payload["papel"] = {"error": str(exception)}
+    # Modelo de recencia (paquete `recencia`): mismo almacén que el modo papel.
+    # Objetos: recencia_modelo.json, recencia_registro.csv, recencia_monitor.json,
+    # recencia_pendientes.json y recencia_aciertos.json.
+    try:
+        almacen, persistente = almacen_papel()
+        payload["recencia"] = recencia_web.panel(rows, almacen, persistente)
+    except Exception as exception:
+        payload["recencia"] = {"error": str(exception)}
     payload["storage_restaurado"] = storage_restaurado
     # Análisis cuantitativo, decisión (SIN VENTAJA por defecto) y puerta de
     # señales; el informe se cachea por hash del dataset.

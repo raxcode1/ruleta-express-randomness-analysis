@@ -37,6 +37,14 @@ function render(data) {
 
   renderRecovery(data.recovery, data.recovery_error);
   renderResults(results);
+  try {
+    renderRecencia(data);
+  } catch (error) {
+    // la tarjeta nueva nunca debe impedir que se pinten las demás
+    const box = document.querySelector("#recencia-error");
+    box.classList.remove("hidden");
+    box.textContent = `Recencia: ${error.message}`;
+  }
   renderPapel(data);
   renderQuant(data);
   renderAlert(data);
@@ -124,6 +132,72 @@ function renderQuant(data) {
     `PRNG: ${prng.verdict || "-"} · ` + (prng.hypotheses || []).map((h) => `${h.generator}: ${h.status}`).join(" · ");
 }
 
+function renderRecencia(data) {
+  const rec = data.recencia || {};
+  const badge = document.querySelector("#recencia-state");
+  const errorBox = document.querySelector("#recencia-error");
+  errorBox.classList.toggle("hidden", !rec.error);
+  errorBox.textContent = rec.error ? `Recencia: ${rec.error}` : "";
+  document.querySelector("#recencia-advertencias").innerHTML = (rec.advertencias || [])
+    .map((a) => `<li>${escapeHtml(a)}</li>`).join("");
+  if (rec.error || !rec.activo || !rec.aciertos) {
+    badge.textContent = rec.activo === false ? "DESACTIVADO" : "SIN DATOS";
+    badge.className = "alert-badge idle";
+    return;
+  }
+  const mon = rec.monitor || {};
+  const p = rec.proxima;
+  const stake = p ? Number(p.stake_sugerido || 0) : 0;
+  badge.textContent = mon.estado === "pausado" ? "PAUSADO" : stake > 0 ? "JUGADA SUGERIDA" : "NO APOSTAR";
+  badge.className = `alert-badge ${stake > 0 && mon.estado !== "pausado" ? "active" : "idle"}`;
+  const lista = (s) => (s ? s.split(" ").map(number).join(" · ") : "");
+  document.querySelector("#recencia-numbers").textContent = p && p.numeros ? lista(p.numeros) : "-";
+  const detalle = [];
+  if (p) {
+    detalle.push(`Sorteo ${p.sorteo_objetivo} · previsto ${p.hora_prevista}`);
+    const probs = (p.probabilidades_topk || "").split(" ").map((x) => percent(Number(x)));
+    detalle.push(`top-${p.k}: ` + (p.numeros_topk || "").split(" ").map((n, i) => `${number(n)} (${probs[i]})`).join(", "));
+    if (stake > 0) detalle.push(`stake ${percent(stake)} del banco · ${p.monto_por_numero} por número`);
+    detalle.push(p.motivo);
+  }
+  document.querySelector("#recencia-detail").textContent = detalle.join(" · ") || "Sin predicción abierta.";
+  const ventana = rec.ventana ? `${rec.ventana[0]}–${rec.ventana[1]}` : "no reconocida";
+  document.querySelector("#recencia-regimen").textContent =
+    `Régimen actual: ${rec.regimen} · franja diurna ${ventana} · modelo ${rec.modelo.metodo} hasta No. ${rec.modelo.hasta_sorteo}` +
+    (rec.persistente ? "" : " · SIN SUPABASE: el registro no se conserva");
+  const cu = mon.cusum || {};
+  const cal = mon.calibracion || {};
+  document.querySelector("#recencia-monitor").textContent =
+    `Monitor: ${String(mon.estado || "-").toUpperCase()}` + ((mon.motivos || []).length ? ` (${mon.motivos.join("; ")})` : "") +
+    ` · repetición: ${(mon.repeticion || {}).detalle || "-"} · CUSUM ${cu.estadistico ?? "-"}/${cu.umbral ?? "-"} (n=${cu.n ?? 0})` +
+    (cal.log_loss != null ? ` · log-loss 500: ${Number(cal.log_loss).toFixed(4)} vs ${Number(cal.uniforme).toFixed(4)}` : "");
+  const a = rec.aciertos;
+  const k = String(rec.decision.k);
+  const medida = (m) => (m && m.n ? `${m.aciertos}/${m.n} · ${percent(m.tasa)} (equilibrio ${percent(m.equilibrio)}) · retorno ${(m.retorno_por_peso * 100).toFixed(1)}%` : "sin datos");
+  document.querySelector("#recencia-topk").textContent = medida(((a.top_k || {}).diurno || {})[k]);
+  document.querySelector("#recencia-fuera").textContent = medida(((a.top_k || {}).fuera || {})[k]);
+  const j = a.jugadas || {};
+  document.querySelector("#recencia-jugadas").textContent = j.n
+    ? `${j.aciertos}/${j.n} · retorno ${(j.retorno_por_peso * 100).toFixed(1)}% · banco ×${Number(j.banco_x).toFixed(3)}`
+    : "sin datos";
+  document.querySelector("#recencia-refs").textContent =
+    `${a.evaluadas} evaluadas · ${a.pendientes} pendientes · ${a.tardias} tardías · racha sin acierto diurno: ${a.racha_fallos_diurno}` +
+    ` · k=${k} (${rec.decision.origen || "-"})`;
+  const ig = rec.integridad || {};
+  const ultimo = (ig.ultimos_tramos || [])[0];
+  document.querySelector("#recencia-integridad").textContent = ig.sorteos
+    ? `Integridad: ${ig.sorteos} sorteos · faltan ${ig.faltan} en ${ig.tramos} tramo(s) (${ig.faltan_recientes} en los últimos ${ig.dias_recientes} días)` +
+      (ultimo ? ` · último hueco No. ${ultimo.desde}–${ultimo.hasta} (${ultimo.entre[0]} → ${ultimo.entre[1]})` : "") +
+      ` · predicciones inválidas por hora publicada: ${a.invalidas_por_hora_publicada || 0} · reparar: ${ig.reparar}`
+    : "";
+  const marca = (s, ok) => (!s ? "-" : `<span class="${ok === "1" ? "hit" : "miss"}">${lista(s)}</span>`);
+  document.querySelector("#recencia-body").innerHTML = (rec.ultimas || [])
+    .map((f) => `<tr><td>${escapeHtml(f.sorteo_objetivo)}</td><td>${escapeHtml(f.hora_prevista)}</td><td>${escapeHtml(f.regimen)}</td>` +
+      `<td>${marca(f.numeros_topk, f.acierto_topk)}</td><td>${marca(f.numeros, f.acierto)}</td>` +
+      `<td>${Number(f.stake_sugerido || 0) > 0 ? percent(Number(f.stake_sugerido)) : f.valida === "1" ? "0" : "tardía"}</td><td>${number(f.resultado)}</td></tr>`)
+    .join("");
+}
+
 function renderPapel(data) {
   const papel = data.papel || {};
   const badge = document.querySelector("#papel-state");
@@ -199,7 +273,7 @@ function renderAlert(data) {
   const stats = data.alert_stats || {};
   const fired = Boolean(alert.fired);
   const blocked = Boolean(alert.signal_blocked);
-  badge.textContent = fired ? "SEÑAL ACTIVA" : blocked ? "SIN VENTAJA" : "SIN SEÑAL";
+  badge.textContent = alert.disabled ? "M4 DESACTIVADA" : fired ? "SEÑAL ACTIVA" : blocked ? "SIN VENTAJA" : "SIN SEÑAL";
   badge.className = `alert-badge ${fired ? "active" : "idle"}`;
 
   document.querySelector("#alert-number").textContent = isBlank(alert.number) ? "00" : number(alert.number);

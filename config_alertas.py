@@ -20,6 +20,13 @@ BANCO_INICIAL = 1000.0
 #: 10 apostados, 17:1 neto), 'express19' (18:1 teórico) o 'european37' (PDF).
 MODELO_PAGO = "loteka180"
 
+#: Reglas M4 (ventana 5–7 %, Δ ≤ 4,7 %, anclaje {1, 7, 8}). DESACTIVADAS por
+#: defecto: salen de un log de 80 filas útiles, el anclaje tiene Fisher p = 0,639
+#: («NO CONFIRMADO», informe_validacion_m4.md) y el 29 % del log es contradictorio.
+#: Con False se siguen evaluando y registrando, pero la alerta no se dispara ni
+#: sugiere stake. El código no se borra, por trazabilidad.
+M4_ACTIVO = False
+
 #: Lectura del aislamiento de modelo: 'any' | 'tie' | 'strict'.
 MODO_PRIMARIO = "any"
 
@@ -48,6 +55,15 @@ FRACCION_KELLY = 0.25
 TOPE_EXPOSICION = 0.02
 OBSERVACIONES_MINIMAS = 20
 ACIERTO_MINIMO = 4
+
+#: Modelo de recencia (paquete `recencia/`, ver PLAN_MEJORAS_RECENCIA.md).
+#: Sólo sugiere: nunca apuesta. Fuera de la franja diurna o con el monitor en
+#: «pausado» el stake sugerido es 0.
+RECENCIA_ACTIVO = True
+RECENCIA_K_MAX = 3              # máximo de números por ronda (k se elige en validación)
+RECENCIA_FRACCION_KELLY = 0.25  # ¼ de Kelly (el plan admite de ¼ a ½)
+RECENCIA_MARGEN = 0.05          # jugar v sólo si pago·p(v) > 1 + margen
+RECENCIA_TOPE_RONDA = 0.03      # exposición máxima por ronda (suma de los k números)
 
 #: Modelos de pago disponibles para el dimensionamiento del stake.
 MODELOS_PAGO = {

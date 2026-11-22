@@ -398,8 +398,12 @@ class LiveMonitor:
         bankroll: float = 1000.0,
         backfill_rounds: int = 0,
         max_records: int = 0,
+        reglas_activas: bool = True,
     ) -> None:
         self.load_store = load_store
+        #: False = las reglas M4 se siguen evaluando y registrando (trazabilidad),
+        #: pero la alerta nunca se dispara ni sugiere stake (config_alertas.M4_ACTIVO).
+        self.reglas_activas = bool(reglas_activas)
         self.save_store = save_store
         self.spec = spec or StrategySpec()
         self.payout = payout
@@ -951,18 +955,25 @@ class LiveMonitor:
     def _alert_payload(self, pending: dict | None) -> dict:
         decision = dict(pending.get("decision") or {}) if pending else {}
         stake = decision.get("stake") or None
-        fired = bool(decision.get("fired"))
+        fired_m4 = bool(decision.get("fired"))
+        failures = list(decision.get("failures") or [])
+        if not self.reglas_activas:
+            stake = None
+            failures.insert(0, "Reglas M4 desactivadas (config_alertas.M4_ACTIVO = False): sin evidencia que las sostenga.")
+        fired = fired_m4 and self.reglas_activas
         return {
             "available": pending is not None,
             "fired": fired,
-            "state": "ACTIVA" if fired else "SIN SEÑAL",
+            "disabled": not self.reglas_activas,
+            "rule_fired_m4": fired_m4,
+            "state": "DESACTIVADA" if not self.reglas_activas else "ACTIVA" if fired else "SIN SEÑAL",
             "model": decision.get("model", self.spec.model),
             "number": decision.get("number"),
             "probability": decision.get("probability"),
             "spread": decision.get("spread"),
             "confidence": decision.get("confidence", "NINGUNA"),
             "anchor": bool(decision.get("anchor")),
-            "failures": list(decision.get("failures") or []),
+            "failures": failures,
             "stake": stake,
             "stake_fraction": float(stake.get("stake_fraction", 0.0)) if stake else 0.0,
             "stake_amount": float(stake.get("stake_amount", 0.0)) if stake else 0.0,

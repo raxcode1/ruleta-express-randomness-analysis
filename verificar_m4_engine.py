@@ -25,6 +25,7 @@ from m4_engine import (
     load_supervision_csv,
     normalize_record,
 )
+from m4_engine.config import MODEL_ORDER
 from m4_engine.features import build_features, collapse_conflicts
 from m4_engine.stats import (
     binomial_survival,
@@ -641,7 +642,10 @@ def main() -> int:
         long_engine.advance(value)
         if index == 19:
             captured = long_engine.forecast()
-    check("la matriz en vivo tiene diez submodelos", len(short_forecast.numbers) == 10)
+    check(
+        "la matriz en vivo tiene los diez submodelos de la especificación (+ R1 de recencia)",
+        set(MODEL_ORDER) <= set(short_forecast.numbers) and len(short_forecast.numbers) == 11,
+    )
     check(
         "las probabilidades de la matriz son válidas",
         all(0.0 < value < 1.0 for value in short_forecast.probabilities.values()),

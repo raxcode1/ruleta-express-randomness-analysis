@@ -17,3 +17,10 @@ estado_push_render.json
 papel_modelo.json
 papel_ultima_prob.json
 registro_papel.tmp
+
+# Recencia: cachés que se regeneran solas (recencia_registro.csv y
+# recencia_aciertos.json SÍ se pueden versionar, como registro_papel.csv).
+recencia_modelo.json
+recencia_pendientes.json
+recencia_monitor.json
+*.tmp

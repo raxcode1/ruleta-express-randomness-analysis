@@ -18,6 +18,9 @@ postprocesamiento, como anti-repetición.
 - `web_app.py`: sitio web local, API del dashboard y sincronización automática.
 - `web/`: interfaz del dashboard.
 - `api/dashboard.py`: función serverless para Vercel.
+- `recencia/`: modelo de recencia (antigüedad del número + franja diurna), su
+  backtest, la decisión de stake, el monitor de cambios y el registro en vivo.
+  Ver «Modelo de recencia».
 - `vercel.json`: rutas del sitio estático.
 - `GUIA_IMPORTAR_VERCEL.md`: guía paso a paso para importar y configurar el
   proyecto en Vercel.
@@ -269,7 +272,110 @@ en `.gitignore` a propósito: es un archivo de trabajo. Si lo borras, el monitor
 vuelve a retroanalizar las últimas rondas del CSV y los contadores acumulados
 se reinician.
 
+## Modelo de recencia
+
+Es el modelo con evidencia fuera de muestra. El informe completo está en
+[informe_recencia.md](informe_recencia.md) (y `informe_recencia.json`).
+
+### Qué encontró la auditoría
+
+- Entre ~08:00 y ~20:40 (la «franja diurna», que se aprende sola con
+  `papel.modelo.ventana_diurna()`) el generador casi nunca repite el número
+  anterior (×0,01 frente a 1/19) y favorece los que salieron hace 2 a 5 sorteos
+  (×1,36, ×1,29, ×1,20, ×1,09). Fuera de la franja se comporta casi como azar.
+- El modelo es `P(v) ∝ w[régimen][cubeta(antigüedad de v)]`, con la
+  antigüedad medida en `No_Sorteo` (respeta los huecos) y cubetas 1, 2, 3, 4,
+  5, 6–8, 9–14, 15–30, >30. Se ajusta por conteo con suavizado de Laplace; en
+  validación ganó al logit condicional de `papel` (log-loss 2,9044 frente a
+  2,9050).
+- Backtest walk-forward 60/10/30 (reajuste cada 7 jornadas, 30 % final de
+  prueba mirado una sola vez): en la franja diurna el top-1 acierta 7,48 %
+  (retorno 134,7 %), el top-2 13,97 % (125,8 %) y el top-3 19,69 % (118,2 %),
+  con p < 1e-12 frente al equilibrio. Fuera de la franja, ~100 %: sin ventaja.
+  La calibración por deciles queda dentro de ±0,3 puntos en la franja diurna.
+
+### Qué números jugar y cuánto (`recencia/decision.py`)
+
+- Sólo en la franja diurna y con el monitor sin pausar.
+- k (cuántos números) se eligió por crecimiento logarítmico en validación:
+  **k = 3**. Sólo se juegan los números con `18·p > 1 + RECENCIA_MARGEN`.
+- Stake: Kelly para la jugada de k números (`g(f)` maximizado con
+  `minimize_scalar`) × `RECENCIA_FRACCION_KELLY`, con tope
+  `RECENCIA_TOPE_RONDA` por ronda. Antes pasan las defensas de
+  `m4_engine/kelly.py` (encogimiento, Wilson inferior, ventaja mínima) con la
+  evidencia fuera de muestra del backtest más los aciertos medidos en vivo.
+
+| Parámetro (`config_alertas.py`) | Por defecto | Para qué sirve |
+| --- | --- | --- |
+| `RECENCIA_ACTIVO` | `True` | Encender/apagar el modelo en el panel |
+| `RECENCIA_K_MAX` | 3 | Máximo de números por ronda |
+| `RECENCIA_FRACCION_KELLY` | 0.25 | Fracción de Kelly (de ¼ a ½) |
+| `RECENCIA_MARGEN` | 0.05 | Ventaja mínima por número (`18·p > 1,05`) |
+| `RECENCIA_TOPE_RONDA` | 0.03 | Exposición máxima por ronda (suma de los k números) |
+
+### Monitor de cambios (`recencia/monitor.py`)
+
+- **Repeticiones**: si en las últimas 7 jornadas la repetición inmediata
+  diurna supera el 1 % → «pausado» (se levanta sola cuando vuelve a estar limpia).
+- **CUSUM** del acierto real del top-k contra la tasa esperada del backtest:
+  si cae al equilibrio (k/18) → «pausado», y la pausa sólo se levanta con
+  `python -m recencia reanudar`. Umbral 7: ~2 % de falsas alarmas en ~55
+  jornadas; detecta la caída en ~12 jornadas diurnas.
+- **Calibración**: si el log-loss de las últimas 500 predicciones diurnas deja de
+  mejorar a la uniforme → «alerta» (avisa, no pausa).
+
+Con el monitor en «pausado», o fuera de la franja, el stake sugerido es 0.
+
+### Registro en vivo y aciertos
+
+Cada predicción se registra ANTES del sorteo y se evalúa cuando sale. Los
+objetos van al bucket de Supabase si `SUPABASE_*` está configurado; si no, a
+archivos en la raíz del repositorio (o en `PAPEL_DIR`):
+
+| Objeto | Contenido |
+| --- | --- |
+| `recencia_registro.csv` | Una fila por sorteo objetivo; sólo crece. Al evaluar sólo se rellenan resultado, aciertos, retorno y verificación horaria |
+| `recencia_aciertos.json` | Aciertos del top-k por régimen frente a azar y equilibrio, retorno de las jugadas sugeridas, log-loss y racha |
+| `recencia_modelo.json` | Parámetros ajustados (se reajusta cada 7 jornadas) y bloque de decisión (k, evidencia) |
+| `recencia_monitor.json` | Estado del monitor |
+| `recencia_pendientes.json` | Probabilidades de las predicciones aún sin resultado |
+
+Una fila cuenta sólo si `ts_prediccion` es anterior a la hora prevista
+(`valida`) y a la hora **publicada** del sorteo (`valida_publicada`, se
+comprueba al evaluar).
+
+### Comandos
+
+```powershell
+python -m recencia backtest [--fuente local|supabase|auto]   # informe 60/10/30
+python -m recencia publicar --fuente supabase                # backtest + sube recencia_modelo.json
+python -m recencia vivo --fuente local --sincronizar         # bucle en el PC: sincroniza, evalúa, predice
+python -m recencia estado [--fuente ...]                     # monitor, próxima jugada y aciertos
+python -m recencia reanudar [--fuente ...]                   # levanta la pausa del CUSUM
+python -m recencia integridad [--fuente ...] [--reparar]     # huecos en No_Sorteo; --reparar los pide a Loteka
+```
+
+`--fuente local` usa `Resultados_RuletaExpress.csv`; `supabase` lee el CSV del
+bucket con las mismas funciones que el panel (y falla con un error si no puede,
+en vez de caer en silencio a la copia local); `auto` elige Supabase si está
+configurado. En el panel aparece la tarjeta «Recencia» (`payload["recencia"]`),
+con el número de sorteos que faltan.
+
+### Advertencias
+
+- La ventaja depende de que Loteka no cambie el generador. Si el monitor pausa, no apostar.
+- La varianza es alta: con Kelly fraccional, una mala racha de cientos de sorteos es normal.
+- El pago asumido es 18 por peso en total. Confírmalo en la agencia y cambia `MODELO_PAGO` si es otro.
+- El programa sólo sugiere: no apuesta.
+- El repositorio es público: valora hacerlo privado para que el sesgo no se difunda.
+
 ## Monitor en vivo: predicciones guardadas y alerta M4
+
+> **Las reglas M4 están desactivadas por defecto** (`M4_ACTIVO = False`): salen
+> de un log de 80 filas útiles, el anclaje tiene Fisher p = 0,639 («NO
+> CONFIRMADO», `informe_validacion_m4.md`) y el 29 % del log es contradictorio.
+> Se siguen evaluando y guardando por trazabilidad, pero la alerta no se dispara
+> ni sugiere stake. Para el modelo con evidencia, ver «Modelo de recencia».
 
 ### Qué se guarda
 
@@ -337,7 +443,8 @@ Todo lo operativo está en `config_alertas.py`:
 | Parámetro | Por defecto | Para qué sirve |
 | --- | --- | --- |
 | `BANCO_INICIAL` | 1000.0 | Capital de referencia para el stake |
-| `MODELO_PAGO` | `express19` | `express19` (0..18, 18:1) o `european37` (37 casillas, 35:1) |
+| `MODELO_PAGO` | `loteka180` | `loteka180` (pago real: 18 por peso en total, 17:1 neto, equilibrio 1/18), `express19` (18:1 teórico) o `european37` (supuesto del PDF, sólo para comparar) |
+| `M4_ACTIVO` | `False` | Reglas M4 desactivadas: se evalúan y registran, pero no disparan alerta ni sugieren stake |
 | `MODO_PRIMARIO` | `any` | `any`, `tie` o `strict` (ver «Motor de alertas M4») |
 | `LIMITE_INFERIOR` / `LIMITE_SUPERIOR` | 0.05 / 0.07 | Ventana operativa de P(M4) |
 | `DISPERSION_MAXIMA` | 0.047 | Dispersión máxima admitida |
@@ -565,10 +672,11 @@ Opciones útiles:
   `strict`.
 - `--probability-min`, `--probability-max`, `--max-spread`: umbrales del núcleo
   de la especificación.
-- `--payout european37|express19`: modelo de pago usado para el dimensionamiento
-  del stake. `european37` es el supuesto del PDF (37 casillas, 35:1, ventaja de
-  la casa 2,70%); `express19` corresponde al espacio de resultados realmente
-  observado (0..18, 18:1, equilibrio 5,26%).
+- `--payout loteka180|express19|european37`: modelo de pago usado para el
+  dimensionamiento del stake. Por defecto `loteka180`, el pago real (18 por peso
+  en total, equilibrio 1/18 = 5,56%). `express19` es el 18:1 teórico y
+  `european37` el supuesto del PDF (37 casillas, 35:1), que sólo sirve para
+  contrastar sus afirmaciones: la base del juego es 1/19 = 5,26%, no 1/37.
 
 El informe incluye la auditoría de integridad del log, el contraste de cada
 afirmación del PDF, las zonas de probabilidad, las matrices de confusión, el PnL

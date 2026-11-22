@@ -67,6 +67,41 @@
     </section>
     <section class="panel papel-panel">
       <div class="panel-heading">
+        <h2>Recencia · antigüedad del número</h2>
+        <span id="recencia-state" class="alert-badge idle">SIN DATOS</span>
+      </div>
+      <div id="recencia-error" class="alert hidden"></div>
+      <div class="alert-grid">
+        <div>
+          <div class="alert-number" id="recencia-numbers">-</div>
+          <p class="muted" id="recencia-detail">Esperando el próximo sorteo...</p>
+          <p class="muted" id="recencia-regimen"></p>
+          <p class="muted" id="recencia-monitor"></p>
+        </div>
+        <div>
+          <h3>Aciertos medidos (sólo predicciones registradas antes del sorteo)</h3>
+          <div class="metrics">
+            <div><span>Top-k diurno</span><strong id="recencia-topk">-</strong></div>
+            <div><span>Jugadas sugeridas</span><strong id="recencia-jugadas">-</strong></div>
+            <div><span>Top-k fuera de franja</span><strong id="recencia-fuera">-</strong></div>
+          </div>
+          <p class="muted" id="recencia-refs"></p>
+          <p class="muted" id="recencia-integridad"></p>
+        </div>
+      </div>
+      <ul class="muted" id="recencia-advertencias"></ul>
+      <details class="predictions-details">
+        <summary class="muted">Últimas predicciones evaluadas</summary>
+        <div class="table-wrap">
+          <table class="compact">
+            <thead><tr><th>Sorteo</th><th>Hora prevista</th><th>Régimen</th><th>Top-k</th><th>Jugados</th><th>Stake</th><th>Resultado</th></tr></thead>
+            <tbody id="recencia-body"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+    <section class="panel papel-panel">
+      <div class="panel-heading">
         <h2>Modo papel · regla del sorteo t−2</h2>
         <span id="papel-state" class="alert-badge idle">SIN DATOS</span>
       </div>

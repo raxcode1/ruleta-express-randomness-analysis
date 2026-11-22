@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .alerts import AlertEngine
-from .config import EUROPEAN_37, EXPRESS_19, PAYOUT_MODELS, KellyConfig, StrategySpec
+from .config import EUROPEAN_37, EXPRESS_19, LOTEKA_180, PAYOUT_MODELS, KellyConfig, StrategySpec
 from .features import build_features, collapse_conflicts
 from .io import load_supervision_csv
 from .report import render_report, write_report
@@ -51,8 +51,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--payout",
         choices=tuple(PAYOUT_MODELS),
-        default=EUROPEAN_37.name,
-        help="Modelo de pago usado para el dimensionamiento del stake.",
+        default=LOTEKA_180.name,
+        help="Modelo de pago usado para el dimensionamiento del stake (por defecto el real de Loteka).",
     )
     parser.add_argument(
         "--kelly-fraction", type=float, default=0.25, help="Fracción de Kelly aplicada."

@@ -20,7 +20,7 @@ from typing import Any, Mapping
 
 import pandas as pd
 
-from .config import EUROPEAN_37, KellyConfig, PayoutModel, StrategySpec
+from .config import LOTEKA_180, KellyConfig, PayoutModel, StrategySpec
 from .io import normalize_record
 from .kelly import KellyStakeSizer, StakeDecision
 
@@ -125,7 +125,9 @@ class AlertEngine:
         bankroll: float = 1.0,
     ) -> None:
         self.spec = spec or StrategySpec()
-        self.payout = payout or EUROPEAN_37
+        # Sin pago explícito se usa el real de Loteka (18 por peso, equilibrio 1/18),
+        # no el supuesto europeo de 37 casillas del PDF.
+        self.payout = payout or LOTEKA_180
         self.kelly_config = kelly_config or KellyConfig()
         self.stake_sizer = stake_sizer or KellyStakeSizer(self.payout, self.kelly_config)
         self.bankroll = bankroll

@@ -371,15 +371,19 @@ def sync_csv(path: Path, results: list[dict[str, str]]) -> int:
         print(f"Backfill desde archivo histórico: {len(missing_rows)} sorteos recuperados.")
     updated = pd.concat([frame, fresh_rows, pd.DataFrame(missing_rows)], ignore_index=True)
     original_draws = set(frame["No_Sorteo"].dropna().astype(str)) if not frame.empty else set()
-    updated = updated.drop_duplicates(subset=["No_Sorteo"], keep="last")
+    # Duplicados por NÚMERO de sorteo («No. 123» y «No.123» son el mismo).
+    updated["_sorteo_num"] = pd.to_numeric(
+        updated["No_Sorteo"].astype(str).str.extract(r"(\d+)\s*$", expand=False), errors="coerce"
+    ).astype("Int64")
+    sin_numero = updated[updated["_sorteo_num"].isna()]
+    updated = pd.concat(
+        [updated.dropna(subset=["_sorteo_num"]).drop_duplicates(subset=["_sorteo_num"], keep="last"), sin_numero]
+    )
     blank_dates = updated["Fecha"].fillna("").astype(str).str.strip() == ""
     if blank_dates.any():
         raise ValueError(
             f"{int(blank_dates.sum())} sorteos quedaron sin Fecha; no se escribe el CSV."
         )
-    updated["_sorteo_num"] = pd.to_numeric(
-        updated["No_Sorteo"].str.extract(r"(\d+)", expand=False), errors="coerce"
-    ).astype("Int64")
     updated = updated.sort_values(
         "_sorteo_num", ascending=False, kind="stable", na_position="last"
     ).drop(columns="_sorteo_num")
